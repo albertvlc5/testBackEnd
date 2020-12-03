@@ -1,0 +1,209 @@
+version: 2.1
+
+orbs:
+  docker: circleci/docker@0.5.13
+  slack: circleci/slack@3.4.2
+
+jobs:
+  test_app:
+    docker:
+      - image: circleci/openjdk:16-buster
+    parallelism: 2
+    working_directory: ~/atwork-api
+
+    steps:
+      - checkout
+
+      - run:
+          name: Run lint
+          command: gradle detekt
+
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ checksum "build.gradle.kts" }}
+            - v1-dependencies-
+
+      - run:
+          name: install dependencies
+          command: gradle dependencies
+
+      - save_cache:
+          paths:
+            - ~/.gradle
+          key: v1-dependencies-{{ checksum "build.gradle.kts" }}
+
+      - run:
+          name: Run tests
+          command: gradle test -i
+
+      - run:
+          name: Save test results
+          command: |
+            mkdir -p ~/junit/
+            find . -type f -regex ".*/build/test-results/.*xml"
+            find . -type f -regex ".*/build/test-results/.*xml" -exec cp {} ~/junit/ \;
+          when: always
+      - store_test_results:
+          path: ~/junit
+      - store_artifacts:
+          path: ~/junit
+
+  build:
+    docker:
+      - image: 644153193116.dkr.ecr.us-east-1.amazonaws.com/cliditas:v0.4.1
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run: cliditas login
+      - run:
+          command: |
+            cliditas build --cache-from latest \
+            --build-arg artifactory_contextUrl=$ORG_GRADLE_PROJECT_artifactory_contextUrl \
+            --build-arg artifactory_user=$ORG_GRADLE_PROJECT_artifactory_user \
+            --build-arg artifactory_password=$ORG_GRADLE_PROJECT_artifactory_password
+      - run: cliditas push
+      - run: cliditas deploy --channel main --diff
+
+  deploy:
+    parameters:
+      patch:
+        type: string
+    docker:
+      - image: 644153193116.dkr.ecr.us-east-1.amazonaws.com/cliditas:v0.4.1
+    steps:
+      - checkout
+      - run: cliditas login
+      - run: cliditas deploy --channel "${CIRCLE_BRANCH}" -k << parameters.patch >> --yes
+
+  delete:
+    docker:
+      - image: 644153193116.dkr.ecr.us-east-1.amazonaws.com/cliditas:v0.4.1
+    steps:
+      - checkout
+      - run: cliditas login
+      - run: cliditas delete --app "${CIRCLE_PROJECT_REPONAME}" --channel "${CIRCLE_BRANCH}" --yes
+
+  promote_stg:
+    docker:
+      - image: 644153193116.dkr.ecr.us-east-1.amazonaws.com/cliditas:v0.4.1
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run: cliditas login
+      - run: cliditas push --promote-from 644153193116.dkr.ecr.us-east-1.amazonaws.com
+
+  promote_prod:
+    docker:
+      - image: 644153193116.dkr.ecr.us-east-1.amazonaws.com/cliditas:v0.4.1
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run: cliditas login
+      - run: cliditas push --promote-from 794670448117.dkr.ecr.us-east-1.amazonaws.com
+
+  promote_as_latest:
+    docker:
+      - image: 644153193116.dkr.ecr.us-east-1.amazonaws.com/cliditas:v0.4.1
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run: cliditas login
+      - run: cliditas pull
+      - run: cliditas push --as-latest
+
+workflows:
+  version: 2.1
+  lint:
+    jobs:
+      - docker/hadolint:
+          artifacts-path: '/tmp/artifacts'
+          ignore-rules: 'DL3018,DL3008'
+          trusted-registries: 'docker.io,644153193116.dkr.ecr.us-east-1.amazonaws.com,794670448117.dkr.ecr.us-east-1.amazonaws.com,959362439850.dkr.ecr.us-east-1.amazonaws.com,489963411341.dkr.ecr.us-east-1.amazonaws.com,207675128742.dkr.ecr.us-east-1.amazonaws.com,074533405837.dkr.ecr.us-east-1.amazonaws.com,435631400310.dkr.ecr.us-east-1.amazonaws.com'
+          filters:
+            branches:
+              only:
+                - main
+
+  cliditas:
+    jobs:
+      - test_app:
+          context: artifactory-credentials
+      - build:
+          name: build
+          context: deploy-dev
+          filters:
+            branches:
+              only:
+                - main
+          requires:
+            - test_app
+      # Do the following only on main branch
+      - deploy:
+          name: deploy_dev
+          patch: deploy/dev
+          context: deploy-dev
+          filters:
+            branches:
+              only:
+                - main
+          requires:
+            - build
+      - promote_stg:
+          context: deploy-stg
+          filters:
+            branches:
+              only:
+                - main
+          requires:
+            - deploy_dev
+      - deploy:
+          name: deploy_stg
+          patch: deploy/stg
+          context: deploy-stg
+          filters:
+            branches:
+              only:
+                - main
+          requires:
+            - promote_stg
+      - promote_prod:
+          context: deploy-prod
+          filters:
+            branches:
+              only:
+                - main
+          requires:
+            - deploy_stg
+      - approval-deploy:
+          type: approval
+          requires:
+            - promote_prod
+      - slack/approval-notification:
+          message: |
+            [${CIRCLE_USERNAME}]: Please check and approve jobs to manually deploy to production.
+            https://circleci.com/workflow-run/${CIRCLE_WORKFLOW_ID}
+          color: '#228855'
+          requires:
+            - promote_prod
+      - deploy:
+          name: deploy_prod
+          patch: deploy/prod
+          context: deploy-prod
+          filters:
+            branches:
+              only:
+                - main
+          requires:
+            - approval-deploy
+      - promote_as_latest:
+          context: deploy-dev
+          filters:
+            branches:
+              only:
+                - main
+          requires:
+            - deploy_prod

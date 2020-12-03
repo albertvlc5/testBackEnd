@@ -1,0 +1,13 @@
+---
+apiVersion: apps.creditas.io/v1alpha1
+kind: App
+metadata:
+  name: atwork-api
+spec:
+  processes:
+    web: {}
+  routes:
+    atwork-api.dev.creditas.io:
+      paths:
+        - path: /
+          process: web

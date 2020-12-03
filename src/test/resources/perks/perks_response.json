@@ -1,0 +1,14 @@
+[
+  {
+    "type": "PAYROLL",
+    "amountDeductible": null,
+    "totalAmountAvailable": 976.21,
+    "symbol": "R$"
+  },
+  {
+    "type": "SALARY_ADVANCEMENT",
+    "amountDeductible": 99.9,
+    "totalAmountAvailable": 888.2,
+    "symbol": "R$"
+  }
+]

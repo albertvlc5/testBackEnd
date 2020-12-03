@@ -1,0 +1,56 @@
+spring:
+  profiles:
+    active: local
+  main:
+    banner-mode: "off"
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    disable-swagger-default-url: true
+
+logbook:
+  exclude:
+    - /health
+    - /favicon.ico
+    - /metrics
+
+server:
+  port: 8000
+  forward-headers-strategy: framework
+
+management:
+  endpoints:
+    web:
+      base-path: ~
+      cors:
+        allowed-origins: "*"
+        allowed-methods: GET
+      exposure:
+        include: info,health,prometheus,metrics
+        path-mapping:
+          prometheus: /metrics
+  endpoint:
+    prometheus:
+      enabled: true
+
+platform:
+  authentication:
+    baseUrl: https://api.stg.creditas.io/auth
+
+payroll:
+  baseUrl: https://buzz-sandbox.creditoo.com.br/api
+  key:
+    private: fake-consignado-private-key
+    public: fake-consignado-public-key
+
+aang:
+  baseUrl: https://aang.stg.creditas.io
+
+creditas-auth:
+  devModeEnabled: true
+  gateway:
+    publicKeyPem: ${USER_DATA_SIGNATURE_PUBLIC_KEY:fake-auth}
+
+salary-advance:
+  baseUrl: https://mcfly.stg.creditas.io

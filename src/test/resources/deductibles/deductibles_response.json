@@ -1,0 +1,8 @@
+[
+  {
+    "type": "SALARY_ADVANCEMENT",
+    "amountDeductibleThisMonth": 100.0,
+    "symbol": "R$",
+    "dueDate": "2021-01-04"
+  }
+]

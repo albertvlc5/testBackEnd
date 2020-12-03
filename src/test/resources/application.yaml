@@ -1,0 +1,25 @@
+spring:
+  profiles:
+    active: test
+  main:
+    banner-mode: "off"
+
+payroll:
+  baseUrl: http://localhost:8089
+  key:
+    private: fake-consignado-private-key
+    public: fake-consignado-public-key
+
+aang:
+  baseUrl: http://localhost:8089
+
+creditas-auth:
+  gateway:
+    publicKeyPem: fake-auth
+
+platform:
+  authentication:
+    baseUrl: http://localhost:8089/auth
+
+salary-advance:
+  baseUrl: http://localhost:8089
